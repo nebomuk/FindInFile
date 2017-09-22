@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/menu_search"
+        android:title="@string/search_title"
+        android:showAsAction="always"
+        android:actionViewClass="android.widget.SearchView" />
+    <item
+        android:id="@+id/menu_item_share"
+        android:showAsAction="ifRoom"
+        android:title="Share"
+        android:actionProviderClass=
+            "android.widget.ShareActionProvider"
+        />
+    <item
+        android:id="@+id/menu_item_copy_content"
+        android:icon="@drawable/ic_action_content_copy"
+        android:showAsAction="ifRoom"
+        android:title="Copy Content"
+        />
+</menu>
