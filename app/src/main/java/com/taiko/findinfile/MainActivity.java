@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.SearchManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.net.Uri;
@@ -27,7 +28,6 @@ import android.widget.Toast;
 import com.melnykov.fab.FloatingActionButton;
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 
@@ -38,6 +38,7 @@ import java.io.InputStreamReader;
 
 public class MainActivity extends Activity {
 
+    private static final String PREF_KEY_URI = "pref_key_uri";
     private final String TAG = this.getClass().getName();
 
     private static final int READ_REQUEST_CODE = 0xD0C;
@@ -69,7 +70,7 @@ public class MainActivity extends Activity {
             {
                 // ACTION_OPEN_DOCUMENT is the intent to choose a file via the system's file
                 // browser.
-                Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
 
                 // Filter to only show results that can be "opened", such as a
                 // file (as opposed to a list of contacts or timezones)
@@ -79,6 +80,21 @@ public class MainActivity extends Activity {
 
                 startActivityForResult(intent, READ_REQUEST_CODE);
             }});
+
+
+    }
+
+    @Override
+    protected void onStart()
+    {
+        super.onStart();
+        // attempt to load last opened file
+        SharedPreferences preferences = getPreferences(Context.MODE_PRIVATE);
+        String uriStr = preferences.getString(PREF_KEY_URI,"");
+        if(!TextUtils.isEmpty(uriStr))
+        {
+            loadUri(Uri.parse(uriStr));
+        }
     }
 
     /**
@@ -114,77 +130,114 @@ public class MainActivity extends Activity {
         // READ_REQUEST_CODE. If the request code seen here doesn't match, it's the
         // response to some other intent, and the code below shouldn't run at all.
 
+        if (resultData == null)
+        {
+            return;
+        }
+
         if (requestCode == READ_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
-            // The document selected by the user won't be returned in the intent.
-            // Instead, a URI to that document will be contained in the return intent
-            // provided to this method as a parameter.
-            // Pull that URI using resultData.getData().
-            final Uri uri;
-            if (resultData != null) {
-                uri = resultData.getData();
-                Log.i(TAG, "Uri: " + uri.toString());
+            Uri uri = resultData.getData();
 
-                // simple timer controlled progress reporting
-                final Handler mHandler = new Handler();
-                final Runnable mProgressRunner = new Runnable() {
-                    private int mProgress;
-                    public void run() {
-                        mProgress += 8;
+            int takeFlags = resultData.getFlags()
+                    & (Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
 
-                        //Normalize our progress along the progress bar's scale
-                        int progress = (Window.PROGRESS_END - Window.PROGRESS_START) / 100 * mProgress;
-                        setProgress(progress);
+            //noinspection WrongConstant
+            getContentResolver().takePersistableUriPermission(uri, takeFlags);
 
-                        if (mProgress < 100) {
-                            mHandler.postDelayed(this, 10);
-                        }
-                    }};
-                mProgressRunner.run();
+            SharedPreferences preferences = this.getPreferences(Context.MODE_PRIVATE);
+            preferences.edit().putString(PREF_KEY_URI,uri.toString()).apply();
+            loadUri(uri);
+
+        }
+    }
+
+    private void loadUri(final Uri uri)
+    {
+        // The document selected by the user won't be returned in the intent.
+        // Instead, a URI to that document will be contained in the return intent
+        // provided to this method as a parameter.
+        // Pull that URI using resultData.getData().
+
+        Log.i(TAG, "Uri: " + uri.toString());
+
+        // simple timer controlled progress reporting
+        final Handler mHandler = new Handler();
+        final Runnable mProgressRunner = new Runnable() {
+            private int mProgress;
+            public void run() {
+                mProgress += 8;
+
+                //Normalize our progress along the progress bar's scale
+                int progress = (Window.PROGRESS_END - Window.PROGRESS_START) / 100 * mProgress;
+                setProgress(progress);
+
+                if (mProgress < 100) {
+                    mHandler.postDelayed(this, 10);
+                }
+            }};
+        mProgressRunner.run();
 
 
-                // load file contents and parse html thread
-                new Thread(){
+        // load file contents and parse html thread
+        new Thread(){
+            public void run()
+            {
+                try {
+
+
+                    InputStream inputStream = MainActivity.this.getContentResolver().openInputStream(uri);
+                    mStringBuilder = new StringBuilder(inputStream.available());
+
+
+                    BufferedReader br = new BufferedReader(new InputStreamReader(inputStream));
+                    String line;
+
+                    while ((line = br.readLine()) != null) {
+                        mStringBuilder.append(line);
+                        mStringBuilder.append('\n');
+                    }
+                    br.close();
+                    if(mSearchView != null) // null when onCreateOptionsMenu has not been called yet
+                    {
+                        mTextFromSearchQuery = createTextFromSearchQuery(mSearchView.getQuery().toString());
+
+                    }
+                    else
+                    {
+                        mTextFromSearchQuery = mStringBuilder.toString();
+                    }
+
+                }
+                catch (final Exception e) {
+                    runOnUiThread(new Runnable()
+                                  {
+                                      @Override
+                                      public void run()
+                                      {
+                                          Toast.makeText(MainActivity.this, e.getMessage(), Toast.LENGTH_LONG).show();
+                                      }
+                                  });
+                }
+
+                // add the span to the text editor as soon as it is created
+                runOnUiThread(new Runnable(){
+
                     public void run()
                     {
-                        try {
-                            InputStream inputStream = MainActivity.this.getContentResolver().openInputStream(uri);
-                         mStringBuilder = new StringBuilder(inputStream.available());
+                        CharSequence toastText = "text file loaded";
+                        int duration = Toast.LENGTH_SHORT;
+                        Toast toast = Toast.makeText(MainActivity.this.getApplicationContext(), toastText, duration);
+                        toast.show();
+                        setProgress(Window.PROGRESS_END);
+                        mHandler.removeCallbacks(mProgressRunner);
 
+                        displayText(mSearchView.getQuery().toString());
 
-                            BufferedReader br = new BufferedReader(new InputStreamReader(inputStream));
-                            String line;
-
-                            while ((line = br.readLine()) != null) {
-                                mStringBuilder.append(line);
-                                mStringBuilder.append('\n');
-                            }
-                            br.close();
-                            createTextFromSearchQuery(mSearchView.getQuery().toString());
-                        }
-                        catch (IOException e) {
-                            mStringBuilder.append(e.getMessage());
-                            //You'll need to add proper error handling here
-                        }
-
-                        // add the span to the text editor as soon as it is created
-                        MainActivity.this.runOnUiThread(new Runnable(){
-
-                            public void run()
-                            {
-                                CharSequence toastText = "text file loaded";
-                                int duration = Toast.LENGTH_SHORT;
-                                Toast toast = Toast.makeText(MainActivity.this.getApplicationContext(), toastText, duration);
-                                toast.show();
-                                setProgress(Window.PROGRESS_END);
-                                mHandler.removeCallbacks(mProgressRunner);
-
-                                displayText(mSearchView.getQuery().toString());
-                            }
-                        });
                     }
-                }.start();
+                });
             }
-        }
+        }.start();
     }
 
     @Override
@@ -262,7 +315,7 @@ public class MainActivity extends Activity {
 
             public boolean onQueryTextSubmit(String query) {
 
-                createTextFromSearchQuery(query);
+                mTextFromSearchQuery =  createTextFromSearchQuery(query);
                 displayText(query);
 
                 return true;
@@ -273,20 +326,20 @@ public class MainActivity extends Activity {
     }
 
     // initializes mTextFromSearchQuery variable
-    private void createTextFromSearchQuery(String query)
+    private String createTextFromSearchQuery(String query)
     {
         if (!TextUtils.isEmpty(mStringBuilder) && (query.length() < 1 ||  mStringBuilder.length() < 1))
         {
-            mTextFromSearchQuery = mStringBuilder.toString();
-            return;
+            return mStringBuilder.toString();
+
         }
 
         int index = mStringBuilder.indexOf(query);
         if (index <1 || index > mStringBuilder.length()-1) {
-            mTextFromSearchQuery = mStringBuilder.toString();
+            return mStringBuilder.toString();
         }
         else {
-            mTextFromSearchQuery = mStringBuilder.substring(index);
+            return mStringBuilder.substring(index);
         }
 
     }
@@ -300,7 +353,7 @@ public class MainActivity extends Activity {
     /**
      *  returns a reference to the given StringBuilder str from the given String position on
      */
-    protected void displayText(CharSequence highlight)
+    private void displayText(CharSequence highlight)
     {
         if( mTextFromSearchQuery == null || mTextFromSearchQuery.length() <1)
             return;
