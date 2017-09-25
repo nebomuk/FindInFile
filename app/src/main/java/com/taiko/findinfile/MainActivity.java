@@ -11,6 +11,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.text.Spannable;
 import android.text.SpannableString;
+import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -37,13 +38,15 @@ import java.io.InputStreamReader;
 
 public class MainActivity extends Activity {
 
+    private final String TAG = this.getClass().getName();
+
     private static final int READ_REQUEST_CODE = 0xD0C;
-    private TextView textView;
-    private StringBuilder text = new StringBuilder("");
+    private TextView mTextView;
+    private StringBuilder mStringBuilder = new StringBuilder("");
     private ShareActionProvider mShareActionProvider;
-    private String searchStr;
-    private String textFromSearchQuery;
-    private SearchView searchView;
+    private String mSearchStr = "";
+    private String mTextFromSearchQuery = "";
+    private SearchView mSearchView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState)
@@ -57,7 +60,7 @@ public class MainActivity extends Activity {
         handleIntent(intent); // aso called in onNewIntent
 
 
-        textView = findViewById(R.id.textView);
+        mTextView = findViewById(R.id.textView);
         FloatingActionButton fab = findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener()
         {
@@ -87,8 +90,8 @@ public class MainActivity extends Activity {
         handleIntent(intent);
 
         // call this again because onCreateOptionsMenu is not called again
-        if(searchView != null && searchStr != null && searchStr.length() > 0)
-            searchView.setQuery(searchStr, true);
+        if(mSearchView != null && !TextUtils.isEmpty(mSearchStr))
+            mSearchView.setQuery(mSearchStr, true);
     }
 
     private void handleIntent(Intent intent)
@@ -98,7 +101,7 @@ public class MainActivity extends Activity {
         String type = intent.getType();
         if (Intent.ACTION_SEND.equals(action) && type != null) {
             if ("text/plain".equals(type)) {
-                searchStr = intent.getStringExtra(Intent.EXTRA_TEXT);
+                mSearchStr = intent.getStringExtra(Intent.EXTRA_TEXT);
             }
         }
     }
@@ -119,7 +122,7 @@ public class MainActivity extends Activity {
             final Uri uri;
             if (resultData != null) {
                 uri = resultData.getData();
-                Log.i("TESTTAG", "Uri: " + uri.toString());
+                Log.i(TAG, "Uri: " + uri.toString());
 
                 // simple timer controlled progress reporting
                 final Handler mHandler = new Handler();
@@ -145,21 +148,21 @@ public class MainActivity extends Activity {
                     {
                         try {
                             InputStream inputStream = MainActivity.this.getContentResolver().openInputStream(uri);
-                         text = new StringBuilder(inputStream.available());
+                         mStringBuilder = new StringBuilder(inputStream.available());
 
 
                             BufferedReader br = new BufferedReader(new InputStreamReader(inputStream));
                             String line;
 
                             while ((line = br.readLine()) != null) {
-                                text.append(line);
-                                text.append('\n');
+                                mStringBuilder.append(line);
+                                mStringBuilder.append('\n');
                             }
                             br.close();
-                            createTextFromSearchQuery(searchView.getQuery().toString());
+                            createTextFromSearchQuery(mSearchView.getQuery().toString());
                         }
                         catch (IOException e) {
-                            text.append(e.getMessage());
+                            mStringBuilder.append(e.getMessage());
                             //You'll need to add proper error handling here
                         }
 
@@ -175,7 +178,7 @@ public class MainActivity extends Activity {
                                 setProgress(Window.PROGRESS_END);
                                 mHandler.removeCallbacks(mProgressRunner);
 
-                                displayText(searchView.getQuery().toString());
+                                displayText(mSearchView.getQuery().toString());
                             }
                         });
                     }
@@ -202,7 +205,7 @@ public class MainActivity extends Activity {
 
 
                 int shareMaxTextLength = 100000; // this number has been determined by trial and error
-                String truncatedText = truncateText(textFromSearchQuery, shareMaxTextLength);
+                String truncatedText = truncateText(mTextFromSearchQuery, shareMaxTextLength);
 
                 sendIntent.putExtra(Intent.EXTRA_TEXT, truncatedText);
                 sendIntent.setType("text/plain");
@@ -217,12 +220,12 @@ public class MainActivity extends Activity {
                 // pleco reader supports little more than 1000 pages of clipboard text, the number 448486 is suitable for nexus screen sizes, on tablets probably more chars are allowed
                 final int maxTextLength = 448486;
 
-                String truncatedText = truncateText(textFromSearchQuery,maxTextLength);
+                String truncatedText = truncateText(mTextFromSearchQuery,maxTextLength);
                 android.content.ClipData clip = android.content.ClipData.newPlainText("Copied Text", truncatedText);
                 clipboard.setPrimaryClip(clip);
                 Context context = getApplicationContext();
 
-                CharSequence toastText = "text copied to clipboard " + textFromSearchQuery.length();
+                CharSequence toastText = "text copied to clipboard " + mTextFromSearchQuery.length();
                 int duration = Toast.LENGTH_SHORT;
                 Toast toast = Toast.makeText(context, toastText, duration);
                 toast.show();
@@ -242,16 +245,16 @@ public class MainActivity extends Activity {
         mShareActionProvider = (ShareActionProvider) item.getActionProvider();
 
         SearchManager searchManager = (SearchManager) getSystemService(Context.SEARCH_SERVICE);
-            searchView = (SearchView) menu.findItem(R.id.menu_search)
+            mSearchView = (SearchView) menu.findItem(R.id.menu_search)
                     .getActionView();
-            searchView.setSearchableInfo(searchManager
+            mSearchView.setSearchableInfo(searchManager
                     .getSearchableInfo(getComponentName()));
-            searchView.setIconifiedByDefault(false);
+            mSearchView.setIconifiedByDefault(false);
 
-            if(searchStr != null && searchStr.length() > 0)
-            searchView.setQuery(searchStr, true);
+            if(mSearchStr != null && mSearchStr.length() > 0)
+            mSearchView.setQuery(mSearchStr, true);
 
-        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+        mSearchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             public boolean onQueryTextChange(String newText) {
                 onQueryTextSubmit(newText);
                 return true;
@@ -269,20 +272,21 @@ public class MainActivity extends Activity {
         return super.onCreateOptionsMenu(menu);
     }
 
-    // initializes textFromSearchQuery variable
+    // initializes mTextFromSearchQuery variable
     private void createTextFromSearchQuery(String query)
     {
-        if (query.length() < 1 || text == null || text.length() < 1) {
-            textFromSearchQuery = text.toString();
+        if (!TextUtils.isEmpty(mStringBuilder) && (query.length() < 1 ||  mStringBuilder.length() < 1))
+        {
+            mTextFromSearchQuery = mStringBuilder.toString();
             return;
         }
 
-        int index = text.indexOf(query);
-        if (index <1 || index > text.length()-1) {
-            textFromSearchQuery = text.toString();
+        int index = mStringBuilder.indexOf(query);
+        if (index <1 || index > mStringBuilder.length()-1) {
+            mTextFromSearchQuery = mStringBuilder.toString();
         }
         else {
-            textFromSearchQuery = text.substring(index);
+            mTextFromSearchQuery = mStringBuilder.substring(index);
         }
 
     }
@@ -298,7 +302,7 @@ public class MainActivity extends Activity {
      */
     protected void displayText(CharSequence highlight)
     {
-        if( textFromSearchQuery == null || textFromSearchQuery.length() <1)
+        if( mTextFromSearchQuery == null || mTextFromSearchQuery.length() <1)
             return;
 
         // display part of the text
@@ -313,27 +317,27 @@ public class MainActivity extends Activity {
         int numChars = 0;
         int lineCount = 0;
         int maxLineLength = 512; // used for the breakText substring because it will be slow if it is the complete string
-        int maxLineCount = screenHeight/textView.getLineHeight();
-        textView.setLines(maxLineCount);
+        int maxLineCount = screenHeight/ mTextView.getLineHeight();
+        mTextView.setLines(maxLineCount);
 
         // create a reference of  the text from the given index onwards
 
-        while ((lineCount < maxLineCount) && (numChars <  textFromSearchQuery.length())) {
-            numChars = numChars + paint.breakText( textFromSearchQuery.substring(numChars, numChars + maxLineLength), true, screenWidth, null);
+        while ((lineCount < maxLineCount) && (numChars <  mTextFromSearchQuery.length())) {
+            numChars = numChars + paint.breakText( mTextFromSearchQuery.substring(numChars, numChars + maxLineLength), true, screenWidth, null);
             lineCount ++;
         }
 
         // retrieve the String to be displayed in the current textbox
-        String toBeDisplayed =  textFromSearchQuery.substring(0, numChars);
+        String toBeDisplayed =  mTextFromSearchQuery.substring(0, numChars);
 
-        if(highlight != null || highlight.length() <1) {
+        if(highlight != null && highlight.length() >1) {
             Spannable spannable = new SpannableString(toBeDisplayed);
             spannable.setSpan(new ForegroundColorSpan(Color.BLUE), 0, highlight.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-            textView.setText(spannable);
+            mTextView.setText(spannable);
         }
         else
         {
-            textView.setText(toBeDisplayed);
+            mTextView.setText(toBeDisplayed);
         }
     }
 }
