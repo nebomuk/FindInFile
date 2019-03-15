@@ -19,6 +19,7 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.Window;
 import android.widget.SearchView;
 import android.widget.ShareActionProvider;
@@ -30,6 +31,7 @@ import com.melnykov.fab.FloatingActionButton;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.reflect.Field;
 
 
 /**
@@ -56,6 +58,7 @@ public class MainActivity extends Activity {
         requestWindowFeature(Window.FEATURE_PROGRESS);
         setContentView(R.layout.activity_main);
 
+        makeActionOverflowMenuShown();
 
         Intent intent = getIntent();
         handleIntent(intent); // aso called in onNewIntent
@@ -391,6 +394,20 @@ public class MainActivity extends Activity {
         else
         {
             mTextView.setText(toBeDisplayed);
+        }
+    }
+
+    //devices with hardware menu button (e.g. Samsung Galaxy S4) don't show action overflow menu
+    private void makeActionOverflowMenuShown()
+    {
+        try {
+            ViewConfiguration config = ViewConfiguration.get(this);
+            Field menuKeyField = ViewConfiguration.class.getDeclaredField("sHasPermanentMenuKey");
+            if (menuKeyField != null) {
+                menuKeyField.setAccessible(true);
+                menuKeyField.setBoolean(config, false);
+            }
+        } catch (Exception e) {
         }
     }
 }
